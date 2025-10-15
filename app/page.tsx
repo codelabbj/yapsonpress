@@ -61,7 +61,7 @@ export default function DashboardPage() {
     },
   )
 
-  const handleUpdateStatus = async (uid: string, status: "PENDING" | "APPROVED" | "REJECTED") => {
+  const handleUpdateStatus = async (uid: string, status: "pending" | "approved" | "rejected") => {
     setIsUpdating(true)
     try {
       await updateSmsStatus(uid, status)
@@ -69,8 +69,13 @@ export default function DashboardPage() {
       mutateMessages()
       mutateStats()
       mutateSenders()
+      
+      // Show success feedback
+      console.log(`Message ${uid} status updated to ${status}`)
     } catch (error) {
       console.error("Échec de la mise à jour du statut:", error)
+      // Show error feedback
+      alert("Erreur lors de la mise à jour du statut. Veuillez réessayer.")
     } finally {
       setIsUpdating(false)
     }
@@ -84,7 +89,7 @@ export default function DashboardPage() {
 
   return (
     <ProtectedRoute>
-      <div className="flex h-screen flex-col">
+      <div className="flex h-screen flex-col bg-gray-50">
         <TopBar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
@@ -96,27 +101,49 @@ export default function DashboardPage() {
         />
 
         <div className="flex flex-1 overflow-hidden">
-          <SenderSidebar
-            senders={senders || []}
-            selectedSender={selectedSender}
-            onSelectSender={setSelectedSender}
-            isLoading={sendersLoading}
-          />
+          {/* Sidebar - Hidden on mobile, visible on desktop */}
+          <div className="hidden lg:block">
+            <SenderSidebar
+              senders={senders || []}
+              selectedSender={selectedSender}
+              onSelectSender={setSelectedSender}
+              isLoading={sendersLoading}
+            />
+          </div>
 
-          <div className="flex flex-1 flex-col">
-            <div className="border-b border-border p-6">
+          {/* Main Content */}
+          <div className="flex flex-1 flex-col min-w-0">
+            {/* Stats Section */}
+            <div className="border-b border-border bg-white p-4 lg:p-6 shadow-sm">
               <StatsCards stats={stats || null} isLoading={statsLoading} />
             </div>
 
-            <MessageThread
-              messages={messagesData?.results || []}
-              sender={selectedSender}
-              onUpdateStatus={handleUpdateStatus}
-              isLoading={messagesLoading}
-              isUpdating={isUpdating}
-            />
+            {/* Messages Section */}
+            <div className="flex-1 min-h-0">
+              <MessageThread
+                messages={messagesData?.results || []}
+                sender={selectedSender}
+                onUpdateStatus={handleUpdateStatus}
+                isLoading={messagesLoading}
+                isUpdating={isUpdating}
+              />
+            </div>
           </div>
         </div>
+
+        {/* Mobile Sidebar Overlay */}
+        {selectedSender && (
+          <div className="lg:hidden fixed inset-0 z-50 bg-black/50" onClick={() => setSelectedSender(null)}>
+            <div className="absolute right-0 top-0 h-full w-80 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <SenderSidebar
+                senders={senders || []}
+                selectedSender={selectedSender}
+                onSelectSender={setSelectedSender}
+                isLoading={sendersLoading}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </ProtectedRoute>
   )

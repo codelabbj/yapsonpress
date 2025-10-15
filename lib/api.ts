@@ -40,16 +40,32 @@ async function authenticatedFetch(url: string, options: RequestInit = {}): Promi
   return response
 }
 
+export interface ExtractedData {
+  phone?: string
+  amount?: string
+  network?: string
+}
+
 export interface SmsLog {
   uid: string
+  device: string
+  device_id: string
+  device_name?: string
   sender: string
-  message: string
-  status: "PENDING" | "APPROVED" | "REJECTED"
+  content: string
+  received_at: string
+  sms_type: string
+  associated_transaction?: string
+  is_processed: boolean
+  extracted_data: ExtractedData | null
+  ai_confidence_score?: number
+  status: "pending" | "approved" | "rejected"
+  status_display: string
+  status_changed_at?: string
+  status_changed_by?: number
+  status_changed_by_name?: string
+  can_change_status: boolean
   created_at: string
-  device_uid?: string
-  transaction_id?: string
-  amount?: string
-  balance?: string
 }
 
 export interface SmsLogsResponse {
@@ -59,12 +75,19 @@ export interface SmsLogsResponse {
   results: SmsLog[]
 }
 
+export interface StatusDetail {
+  status: "pending" | "approved" | "rejected"
+  count: number
+}
+
 export interface SmsStats {
-  total_messages: number
-  pending_count: number
-  approved_count: number
-  rejected_count: number
-  total_amount?: number
+  total: number
+  by_status: {
+    pending: number
+    approved: number
+    rejected?: number
+  }
+  details: StatusDetail[]
 }
 
 export interface SenderStat {
@@ -137,7 +160,7 @@ export async function fetchUniqueSenders(): Promise<UniqueSender[]> {
   }))
 }
 
-export async function updateSmsStatus(smsLogUid: string, status: "PENDING" | "APPROVED" | "REJECTED"): Promise<SmsLog> {
+export async function updateSmsStatus(smsLogUid: string, status: "pending" | "approved" | "rejected"): Promise<SmsLog> {
   const response = await authenticatedFetch(
     `${BASE_URL}/api/payments/betting/user/sms-logs/${smsLogUid}/update_status/`,
     {
