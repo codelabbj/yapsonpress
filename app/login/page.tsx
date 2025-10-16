@@ -47,7 +47,7 @@ export default function LoginPage() {
               <Input
                 id="identifier"
                 type="text"
-                placeholder="admin@gmail.com"
+                placeholder="Entrez votre email ou votre numéro de téléphone"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 required

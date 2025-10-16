@@ -39,9 +39,9 @@ export function StatsCards({ stats, isLoading }: StatsCardsProps) {
       icon: MessageSquare,
       color: "blue",
       description: "Total des messages",
-      bgColor: "bg-blue-50",
-      iconColor: "text-blue-600",
-      borderColor: "border-blue-200"
+      bgColor: "bg-teal-50",
+      iconColor: "text-teal-600",
+      borderColor: "border-teal-200"
     },
     {
       title: "En attente",
@@ -64,11 +64,11 @@ export function StatsCards({ stats, isLoading }: StatsCardsProps) {
       borderColor: "border-green-200"
     },
     {
-      title: "Rejeté",
-      value: stats.by_status.rejected || 0,
+      title: "Pas de commande",
+      value: stats.by_status.no_order || 0,
       icon: XCircle,
       color: "red",
-      description: "Messages rejetés",
+      description: "Pas de commande associée",
       bgColor: "bg-red-50",
       iconColor: "text-red-600",
       borderColor: "border-red-200"
