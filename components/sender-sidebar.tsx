@@ -154,14 +154,14 @@ export function SenderSidebar({
                         )}>
                           {pkg.package_name}
                         </p>
-                        {pkg.pending_count > 0 && (
+                        {pkg.unread_count > 0 && (
                           <Badge
                             className={cn(
                               "h-5 min-w-5 rounded-full px-1 text-xs font-semibold bg-red-500 text-white",
                               selectedSender === "com.wave.business" && "bg-red-400"
                             )}
                           >
-                            {pkg.pending_count}
+                            {pkg.unread_count}
                           </Badge>
                         )}
                       </div>
@@ -236,14 +236,14 @@ export function SenderSidebar({
                       )}>
                         {sender.sender}
                       </p>
-                      {sender.pending_count > 0 && (
+                      {sender.unread_count > 0 && (
                         <Badge
                           className={cn(
                             "h-5 min-w-5 rounded-full px-1 text-xs font-semibold bg-red-500 text-white",
                             selectedSender === sender.sender && "bg-red-400"
                           )}
                         >
-                          {sender.pending_count}
+                          {sender.unread_count}
                         </Badge>
                       )}
                     </div>

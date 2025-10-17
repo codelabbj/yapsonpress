@@ -28,6 +28,7 @@ interface MessageThreadProps {
 export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isUpdating, hasNextPage, isLoadingMore, onLoadMore, currentPage, isWaveMode }: MessageThreadProps) {
   const [selectedMessage, setSelectedMessage] = useState<SmsLog | FcmLog | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [hasUserScrolled, setHasUserScrolled] = useState(false)
 
   const handleMessageClick = (message: SmsLog | FcmLog) => {
     setSelectedMessage(message)
@@ -103,26 +104,45 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when messages change (to show latest messages)
+  // Auto-scroll to bottom when messages first load (show newest messages)
   useEffect(() => {
-    if (scrollAreaRef.current && messages.length > 0) {
+    if (scrollAreaRef.current && messages.length > 0 && !hasUserScrolled) {
       const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
       if (scrollElement) {
         scrollElement.scrollTop = scrollElement.scrollHeight
       }
     }
-  }, [messages.length])
+  }, [messages.length, hasUserScrolled])
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = event.currentTarget
+    const { scrollTop } = event.currentTarget
     
-    // Check if user has scrolled to within 100px of the top (for loading more messages)
-    if (scrollTop < 100) {
+    console.log("Scroll event - scrollTop:", scrollTop, "hasUserScrolled:", hasUserScrolled)
+    
+    // Mark that user has scrolled (not on initial load)
+    if (scrollTop > 0) {
+      setHasUserScrolled(true)
+    }
+    
+    // Load next page when user reaches the very top AND has scrolled at least once
+    if (scrollTop === 0 && hasUserScrolled) {
+      console.log("At top - triggering load more")
+      console.log("hasNextPage:", hasNextPage, "isLoadingMore:", isLoadingMore, "onLoadMore:", !!onLoadMore)
       if (hasNextPage && !isLoadingMore && onLoadMore) {
+        console.log("Calling onLoadMore")
         onLoadMore()
       }
     }
-  }, [hasNextPage, isLoadingMore, onLoadMore])
+  }, [hasNextPage, isLoadingMore, onLoadMore, hasUserScrolled])
+
+  // Add a manual trigger button as fallback
+  const handleManualLoadMore = () => {
+    console.log("Manual load more triggered")
+    if (hasNextPage && !isLoadingMore && onLoadMore) {
+      onLoadMore()
+    }
+  }
+
 
   if (!sender) {
     return (
@@ -197,21 +217,34 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
         onScrollCapture={handleScroll}
       >
         <div className="space-y-4">
+          {/* Manual Load More Button - Fallback */}
+          {hasNextPage && !isLoadingMore && (
+            <div className="flex justify-center py-4">
+              <Button 
+                onClick={handleManualLoadMore}
+                variant="outline"
+                className="bg-white hover:bg-gray-50 border-gray-300"
+              >
+                Charger plus de messages
+              </Button>
+            </div>
+          )}
+
           {/* Loading more indicator - at top */}
           {isLoadingMore && (
-            <div className="flex justify-center py-6 bg-gray-50 rounded-lg mx-4">
-              <div className="flex items-center gap-3 text-gray-600">
-                <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-                <span className="text-sm font-medium">Chargement de plus de messages...</span>
+            <div className="flex justify-center py-4">
+              <div className="flex items-center gap-2 text-gray-500">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Chargement de plus de messages...</span>
               </div>
             </div>
           )}
 
           {/* No more messages indicator - at top */}
           {!hasNextPage && messages.length > 0 && !isLoadingMore && (
-            <div className="flex justify-center py-4 bg-blue-50 rounded-lg mx-4">
-              <div className="text-center text-gray-600">
-                <span className="text-sm font-medium">Tous les messages ont été chargés</span>
+            <div className="flex justify-center py-4">
+              <div className="text-center text-gray-500">
+                <span className="text-sm">Tous les messages ont été chargés</span>
               </div>
             </div>
           )}
