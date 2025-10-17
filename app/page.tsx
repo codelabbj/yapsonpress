@@ -341,13 +341,21 @@ export default function DashboardPage() {
   // Reset messages when sender changes
   const handleSelectSender = useCallback((sender: string | null, waveMode: boolean = false) => {
     console.log("🎯 handleSelectSender called with:", { sender, waveMode })
+    
+    // Only reset messages if the sender or wave mode actually changed
+    const senderChanged = selectedSender !== sender
+    const waveModeChanged = isWaveMode !== waveMode
+    
+    if (senderChanged || waveModeChanged) {
+      setAllMessages([])
+      setCurrentPage(1)
+      setHasNextPage(false)
+      setIsLoadingMore(false)
+    }
+    
     setSelectedSender(sender)
     setIsWaveMode(waveMode)
-    setAllMessages([])
-    setCurrentPage(1)
-    setHasNextPage(false)
-    setIsLoadingMore(false)
-  }, [])
+  }, [selectedSender, isWaveMode])
 
   return (
     <ProtectedRoute>

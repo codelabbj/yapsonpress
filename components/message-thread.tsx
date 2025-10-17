@@ -192,8 +192,7 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
               {/* Message Bubble */}
               <div className="relative w-full max-w-lg lg:max-w-4xl">
                 <div 
-                  className="bg-gray-200 rounded-2xl rounded-bl-md p-6 shadow-sm cursor-pointer hover:bg-gray-300 transition-colors w-full"
-                  onClick={() => handleMessageClick(message)}
+                  className="bg-gray-200 rounded-2xl rounded-bl-md p-6 shadow-sm w-full"
                 >
                   {/* Title for FCM logs */}
                   {isFcmLog(message) && message.title && (
@@ -210,7 +209,7 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
                   </div>
                   
                   {/* Extracted Data */}
-                  {(getMessageAmount(message) || getMessagePhone(message) || getMessageSenderName(message)) && (
+                  {/* {(getMessageAmount(message) || getMessagePhone(message) || getMessageSenderName(message)) && (
                     <div className="mt-3 space-y-2">
                       {getMessageAmount(message) && (
                         <div className="flex items-center gap-2 text-xs text-gray-600">
@@ -231,14 +230,22 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
                         </div>
                       )}
                     </div>
-                  )}
+                  )} */}
 
                   {/* Status and Time - Bottom Right */}
                   <div className="flex justify-end items-center gap-2 mt-4">
                     <span className="text-xs text-gray-500">{formatDateTime(isFcmLog(message) ? message.created_at : message.received_at)}</span>
-                    <div className="flex items-center gap-1">
+                    <div 
+                      className="flex items-center gap-1 cursor-pointer hover:bg-gray-300 rounded px-2 py-1 transition-colors"
+                      onClick={() => handleMessageClick(message)}
+                      title="Cliquer pour changer le statut"
+                    >
                       {getStatusIcon(message.status)}
-                      <span className="text-xs font-medium text-gray-600">{message.status_display}</span>
+                      <span className={`text-xs font-medium ${
+                        message.status === "approved" ? "text-green-600" :
+                        message.status === "no_order" ? "text-red-600" :
+                        "text-yellow-600"
+                      }`}>{message.status_display}</span>
                     </div>
                   </div>
                 </div>

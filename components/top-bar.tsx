@@ -74,9 +74,9 @@ export function TopBar({
 
       {/* Status Filter */}
       <div className="flex items-center gap-3">
-        <Filter className="h-5 w-5 text-white/80" />
+        <Filter className="h-6 w-6 text-white/80 lg:h-7 lg:w-7" />
         <Select value={statusFilter} onValueChange={onStatusFilterChange}>
-          <SelectTrigger className="w-56 h-12 bg-white border-gray-200 focus:border-blue-300 lg:w-64 lg:h-14">
+          <SelectTrigger className="w-56 h-14 bg-white border-gray-200 focus:border-blue-300 focus:ring-blue-200 lg:w-64 lg:h-16" style={{ minHeight: '3.5rem' }}>
             <SelectValue placeholder="Tous les statuts" />
           </SelectTrigger>
           <SelectContent className="bg-white border border-gray-200 shadow-lg">
@@ -101,7 +101,7 @@ export function TopBar({
             <SelectItem value="no_order">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-red-400"></div>
-                <span>Rejeté</span>
+                <span>Pas de commande</span>
               </div>
             </SelectItem>
           </SelectContent>
@@ -134,7 +134,7 @@ export function TopBar({
         {/* <Button 
           variant="outline" 
           size="icon" 
-          className="bg-white/10 hover:bg-white/20 border-white/20 text-white"
+          className="h-12 w-12 bg-white/10 hover:bg-white/20 border-white/20 text-white lg:h-14 lg:w-14"
           title="Notifications"
         >
           <Bell className="h-4 w-4" />
@@ -143,7 +143,7 @@ export function TopBar({
         <Button 
           variant="outline" 
           size="icon" 
-          className="bg-white/10 hover:bg-white/20 border-white/20 text-white"
+          className="h-12 w-12 bg-white/10 hover:bg-white/20 border-white/20 text-white lg:h-14 lg:w-14"
           title="Supprimer"
         >
           <Trash2 className="h-4 w-4" />
@@ -154,7 +154,7 @@ export function TopBar({
             variant="outline" 
             size="icon" 
             onClick={onLogout} 
-            className="bg-white/10 hover:bg-white/20 border-white/20 text-white" 
+            className="h-12 w-12 bg-white/10 hover:bg-white/20 border-white/20 text-white lg:h-14 lg:w-14" 
             title="Déconnexion"
           >
             <LogOut className="h-4 w-4" />
