@@ -230,7 +230,7 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
                         </div>
                       )}
                     </div>
-                  )} 
+                  )} */}
 
                   {/* Status and Time - Bottom Right */}
                   <div className="flex justify-end items-center gap-2 mt-4">
