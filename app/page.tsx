@@ -128,10 +128,10 @@ export default function DashboardPage() {
       }
     },
     {
-      refreshInterval: 60000,
+      refreshInterval: 0, // Disable automatic refresh
       dedupingInterval: 2000, // Prevent duplicate requests within 2 seconds
       revalidateOnFocus: false, // Prevent revalidation on window focus
-      revalidateOnReconnect: true, // Only revalidate on network reconnect
+      revalidateOnReconnect: false, // Disable revalidation on network reconnect
       errorRetryCount: 3, // Limit retry attempts
       errorRetryInterval: 5000, // Wait 5 seconds between retries
     },
