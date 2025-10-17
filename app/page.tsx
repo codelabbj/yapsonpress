@@ -31,7 +31,7 @@ import {
   type PinnedSendersResponse,
   type PinnedSender,
 } from "@/lib/pin-api"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import useSWR from "swr"
 
 export default function DashboardPage() {
@@ -129,13 +129,22 @@ export default function DashboardPage() {
     },
     {
       refreshInterval: 60000,
-      onSuccess: (data: SmsLogsResponse | FcmLogsResponse) => {
-        setAllMessages(data.results)
-        setCurrentPage(1)
-        setHasNextPage(!!data.next)
-      },
+      dedupingInterval: 2000, // Prevent duplicate requests within 2 seconds
+      revalidateOnFocus: false, // Prevent revalidation on window focus
+      revalidateOnReconnect: true, // Only revalidate on network reconnect
+      errorRetryCount: 3, // Limit retry attempts
+      errorRetryInterval: 5000, // Wait 5 seconds between retries
     },
   )
+
+  // Handle messages data updates separately to avoid re-render loops
+  useEffect(() => {
+    if (messagesData) {
+      setAllMessages(messagesData.results)
+      setCurrentPage(1)
+      setHasNextPage(!!messagesData.next)
+    }
+  }, [messagesData])
 
   const handleUpdateStatus = async (uid: string, status: "approved" | "no_order") => {
     setIsUpdating(true)
