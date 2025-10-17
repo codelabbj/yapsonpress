@@ -103,11 +103,21 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
+  // Auto-scroll to bottom when messages change (to show latest messages)
+  useEffect(() => {
+    if (scrollAreaRef.current && messages.length > 0) {
+      const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
+      if (scrollElement) {
+        scrollElement.scrollTop = scrollElement.scrollHeight
+      }
+    }
+  }, [messages.length])
+
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget
     
-    // Check if user has scrolled to within 100px of the bottom
-    if (scrollHeight - scrollTop - clientHeight < 100) {
+    // Check if user has scrolled to within 100px of the top (for loading more messages)
+    if (scrollTop < 100) {
       if (hasNextPage && !isLoadingMore && onLoadMore) {
         onLoadMore()
       }
@@ -187,7 +197,26 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
         onScrollCapture={handleScroll}
       >
         <div className="space-y-4">
-          {messages.map((message) => (
+          {/* Loading more indicator - at top */}
+          {isLoadingMore && (
+            <div className="flex justify-center py-6 bg-gray-50 rounded-lg mx-4">
+              <div className="flex items-center gap-3 text-gray-600">
+                <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                <span className="text-sm font-medium">Chargement de plus de messages...</span>
+              </div>
+            </div>
+          )}
+
+          {/* No more messages indicator - at top */}
+          {!hasNextPage && messages.length > 0 && !isLoadingMore && (
+            <div className="flex justify-center py-4 bg-blue-50 rounded-lg mx-4">
+              <div className="text-center text-gray-600">
+                <span className="text-sm font-medium">Tous les messages ont été chargés</span>
+              </div>
+            </div>
+          )}
+
+          {messages.slice().reverse().map((message) => (
             <div key={message.uid} className="mb-8 flex justify-center">
               {/* Message Bubble */}
               <div className="relative w-full max-w-lg lg:max-w-4xl">
@@ -209,7 +238,7 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
                   </div>
                   
                   {/* Extracted Data */}
-                  {/* {(getMessageAmount(message) || getMessagePhone(message) || getMessageSenderName(message)) && (
+                   {(getMessageAmount(message) || getMessagePhone(message) || getMessageSenderName(message) || true) && (
                     <div className="mt-3 space-y-2">
                       {getMessageAmount(message) && (
                         <div className="flex items-center gap-2 text-xs text-gray-600">
@@ -230,7 +259,7 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
                         </div>
                       )}
                     </div>
-                  )} */}
+                  )} 
 
                   {/* Status and Time - Bottom Right */}
                   <div className="flex justify-end items-center gap-2 mt-4">
@@ -265,24 +294,6 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
             </div>
           )}
 
-          {/* Loading more indicator */}
-          {isLoadingMore && (
-            <div className="flex justify-center py-4">
-              <div className="flex items-center gap-2 text-gray-500">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">Chargement de plus de messages...</span>
-              </div>
-            </div>
-          )}
-
-          {/* End of messages indicator */}
-          {!hasNextPage && messages.length > 0 && !isLoadingMore && (
-            <div className="flex justify-center py-4">
-              <div className="text-center text-gray-500">
-                <span className="text-sm">Tous les messages ont été chargés</span>
-              </div>
-            </div>
-          )}
         </div>
       </ScrollArea>
 
