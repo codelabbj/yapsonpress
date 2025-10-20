@@ -94,6 +94,7 @@ export interface SenderStat {
   sender: string
   count: number
   pending_count: number
+  unread_count: number
 }
 
 export interface UniqueSendersResponse {
@@ -163,6 +164,7 @@ export interface UniqueSender {
   sender: string
   count: number
   pending_count: number
+  unread_count: number
 }
 
 export async function fetchSmsLogs(params: {
@@ -258,7 +260,8 @@ export async function fetchUniqueSenders(): Promise<UniqueSender[]> {
   return data.stats.map(stat => ({
     sender: stat.sender,
     count: stat.count,
-    pending_count: stat.pending_count
+    pending_count: stat.pending_count,
+    unread_count: stat.unread_count
   }))
 }
 

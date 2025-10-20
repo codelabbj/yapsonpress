@@ -36,6 +36,7 @@ export interface PackageStat {
   pending_count: number
   processed_count: number
   ignored_count: number
+  unread_count: number
 }
 
 export interface UniquePackagesResponse {
@@ -48,6 +49,7 @@ export interface UniquePackage {
   package_name: string
   count: number
   pending_count: number
+  unread_count: number
 }
 
 export async function fetchFcmLogs(params: {
@@ -128,7 +130,8 @@ export async function fetchUniquePackages(): Promise<UniquePackage[]> {
     .map(stat => ({
       package_name: "Wave", // Display name as "Wave"
       count: stat.count,
-      pending_count: stat.pending_count // Use actual pending count from API
+      pending_count: stat.pending_count, // Use actual pending count from API
+      unread_count: stat.unread_count
     }))
 }
 

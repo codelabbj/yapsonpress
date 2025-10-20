@@ -23,12 +23,16 @@ interface MessageThreadProps {
   onLoadMore?: () => void
   currentPage?: number
   isWaveMode?: boolean
+  onNewMessagesLoaded?: (newMessageIds: string[]) => void
 }
 
-export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isUpdating, hasNextPage, isLoadingMore, onLoadMore, currentPage, isWaveMode }: MessageThreadProps) {
+export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isUpdating, hasNextPage, isLoadingMore, onLoadMore, currentPage, isWaveMode, onNewMessagesLoaded }: MessageThreadProps) {
   const [selectedMessage, setSelectedMessage] = useState<SmsLog | FcmLog | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [hasUserScrolled, setHasUserScrolled] = useState(false)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [visibleMessages, setVisibleMessages] = useState<Set<string>>(new Set())
+  const [isSequentialLoad, setIsSequentialLoad] = useState(false)
 
   const handleMessageClick = (message: SmsLog | FcmLog) => {
     setSelectedMessage(message)
@@ -104,44 +108,72 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when messages first load (show newest messages)
+  // Auto-scroll to bottom ONLY on initial load (first time messages appear)
   useEffect(() => {
-    if (scrollAreaRef.current && messages.length > 0 && !hasUserScrolled) {
+    if (scrollAreaRef.current && messages.length > 0 && isInitialLoad && !hasUserScrolled && !isSequentialLoad) {
       const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]')
       if (scrollElement) {
-        scrollElement.scrollTop = scrollElement.scrollHeight
+        console.log("Auto-scrolling to bottom on initial load")
+        // Use setTimeout to ensure DOM is fully rendered
+        setTimeout(() => {
+          scrollElement.scrollTop = scrollElement.scrollHeight
+          setIsInitialLoad(false) // Mark that initial load is complete
+        }, 100)
       }
     }
-  }, [messages.length, hasUserScrolled])
+  }, [messages.length, hasUserScrolled, isInitialLoad, isSequentialLoad, visibleMessages.size])
+
+  // Reset initial load flag when sender changes
+  useEffect(() => {
+    setIsInitialLoad(true)
+    setHasUserScrolled(false)
+    setVisibleMessages(new Set()) // Clear visible messages when sender changes
+    setIsSequentialLoad(false) // Reset sequential load flag
+  }, [sender])
+
+  // Show messages - normal load for first page, sequential for additional pages
+  useEffect(() => {
+    if (messages.length > 0) {
+      if (isSequentialLoad) {
+        // Sequential loading for additional pages
+        messages.forEach((message, index) => {
+          setTimeout(() => {
+            setVisibleMessages(prev => new Set([...prev, message.uid]))
+          }, index * 800) // 800ms delay between each message
+        })
+      } else {
+        // Normal loading for first page - show all messages immediately
+        const allMessageIds = messages.map(message => message.uid)
+        setVisibleMessages(new Set(allMessageIds))
+      }
+    }
+  }, [messages, isSequentialLoad])
+
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop } = event.currentTarget
     
-    console.log("Scroll event - scrollTop:", scrollTop, "hasUserScrolled:", hasUserScrolled)
-    
-    // Mark that user has scrolled (not on initial load)
-    if (scrollTop > 0) {
+    // Only mark as scrolled if user has scrolled significantly (not just tiny movements)
+    if (scrollTop > 50) {
       setHasUserScrolled(true)
     }
     
-    // Load next page when user reaches the very top AND has scrolled at least once
-    if (scrollTop === 0 && hasUserScrolled) {
-      console.log("At top - triggering load more")
-      console.log("hasNextPage:", hasNextPage, "isLoadingMore:", isLoadingMore, "onLoadMore:", !!onLoadMore)
-      if (hasNextPage && !isLoadingMore && onLoadMore) {
-        console.log("Calling onLoadMore")
-        onLoadMore()
-      }
-    }
-  }, [hasNextPage, isLoadingMore, onLoadMore, hasUserScrolled])
+    // DISABLED: No automatic loading on scroll - only manual button
+    // This prevents any automatic API requests
+  }, [])
 
   // Add a manual trigger button as fallback
   const handleManualLoadMore = () => {
     console.log("Manual load more triggered")
+    // Ensure user has scrolled flag is set
+    setHasUserScrolled(true)
+    // Set sequential load flag for additional pages
+    setIsSequentialLoad(true)
     if (hasNextPage && !isLoadingMore && onLoadMore) {
       onLoadMore()
     }
   }
+
 
 
   if (!sender) {
@@ -217,25 +249,27 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
         onScrollCapture={handleScroll}
       >
         <div className="space-y-4">
-          {/* Manual Load More Button - Fallback */}
+          {/* Manual Load More Button - Primary Method */}
           {hasNextPage && !isLoadingMore && (
-            <div className="flex justify-center py-4">
+            <div className="flex justify-center py-6 animate-fade-in-scale">
               <Button 
                 onClick={handleManualLoadMore}
                 variant="outline"
                 className="bg-white hover:bg-gray-50 border-gray-300"
               >
-                Charger plus de messages
+                📥 Charger plus de messages
               </Button>
             </div>
           )}
 
-          {/* Loading more indicator - at top */}
-          {isLoadingMore && (
-            <div className="flex justify-center py-4">
-              <div className="flex items-center gap-2 text-gray-500">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-sm">Chargement de plus de messages...</span>
+          {/* Sequential Loading Indicator */}
+          {messages.length > 0 && visibleMessages.size < messages.length && (
+            <div className="flex justify-center py-4 animate-fade-in-scale">
+              <div className="flex items-center gap-2 text-gray-500 bg-white/50 rounded-lg px-4 py-2 shadow-sm">
+                <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                <span className="text-sm font-medium">
+                  Chargement des messages... {visibleMessages.size}/{messages.length}
+                </span>
               </div>
             </div>
           )}
@@ -249,12 +283,25 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
             </div>
           )}
 
-          {messages.slice().reverse().map((message) => (
-            <div key={message.uid} className="mb-8 flex justify-center">
+          {messages.slice().reverse().map((message, index) => {
+            const isVisible = visibleMessages.has(message.uid)
+            
+            // Only render visible messages
+            if (!isVisible) return null
+            
+            return (
+              <div 
+                key={message.uid} 
+                className="mb-8 flex justify-center animate-fade-in-up"
+                style={{
+                  animationDelay: "0s",
+                  animationFillMode: 'both'
+                }}
+              >
               {/* Message Bubble */}
               <div className="relative w-full max-w-lg lg:max-w-4xl">
                 <div 
-                  className="bg-gray-200 rounded-2xl rounded-bl-md p-6 shadow-sm w-full"
+                  className="bg-gray-200 rounded-2xl rounded-bl-md p-6 shadow-sm w-full transition-all duration-200 hover:shadow-md"
                 >
                   {/* Title for FCM logs */}
                   {isFcmLog(message) && message.title && (
@@ -313,7 +360,8 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
                 </div>
               </div>
             </div>
-          ))}
+            )
+          })}
 
           {messages.length === 0 && (
             <div className="flex items-center justify-center" style={{ height: 'calc(100vh - 400px)' }}>

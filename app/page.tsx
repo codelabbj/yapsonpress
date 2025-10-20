@@ -48,6 +48,7 @@ export default function DashboardPage() {
   const [isWaveMode, setIsWaveMode] = useState(false)
   const [isPinning, setIsPinning] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [newMessageIds, setNewMessageIds] = useState<string[]>([])
 
   // Récupérer les expéditeurs uniques
   const {
@@ -113,7 +114,6 @@ export default function DashboardPage() {
           status: statusFilter !== "all" ? statusFilter : undefined,
           ordering: "-created_at",
           page: 1,
-          page_size: 20,
         })
       } else {
         console.log("📱 SMS mode detected - calling fetchSmsLogs")
@@ -123,7 +123,6 @@ export default function DashboardPage() {
           status: statusFilter !== "all" ? statusFilter : undefined,
           ordering: "-created_at",
           page: 1,
-          page_size: 20,
         })
       }
     },
@@ -280,7 +279,6 @@ export default function DashboardPage() {
           status: statusFilter !== "all" ? statusFilter : undefined,
           ordering: "-created_at",
           page: nextPage,
-          page_size: 20,
         })
       } else {
         data = await fetchSmsLogs({
@@ -289,7 +287,6 @@ export default function DashboardPage() {
           status: statusFilter !== "all" ? statusFilter : undefined,
           ordering: "-created_at",
           page: nextPage,
-          page_size: 20,
         })
       }
 
@@ -356,6 +353,11 @@ export default function DashboardPage() {
     setSelectedSender(sender)
     setIsWaveMode(waveMode)
   }, [selectedSender, isWaveMode])
+
+  const handleNewMessagesLoaded = useCallback((messageIds: string[]) => {
+    console.log("New messages loaded callback:", messageIds)
+    setNewMessageIds(messageIds)
+  }, [])
 
   return (
     <ProtectedRoute>
@@ -429,6 +431,7 @@ export default function DashboardPage() {
                 onLoadMore={handleLoadMore}
                 currentPage={currentPage}
                 isWaveMode={isWaveMode}
+                onNewMessagesLoaded={handleNewMessagesLoaded}
               />
             </div>
           </div>
