@@ -31,10 +31,10 @@ import {
   type PinnedSendersResponse,
   type PinnedSender,
 } from "@/lib/pin-api"
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useRef } from "react"
 import useSWR from "swr"
 import { useMessagesV2 } from "@/hooks/use-messages-v2"
-import { useConversationCache } from "@/hooks/use-conversation-cache"
+import { useConversationStore } from "@/hooks/use-conversation-store"
 
 export default function DashboardPage() {
   const { logout } = useAuth()
@@ -50,6 +50,9 @@ export default function DashboardPage() {
   const [isPinning, setIsPinning] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [useCacheOnly, setUseCacheOnly] = useState(false)
+  const [restoreScrollTop, setRestoreScrollTop] = useState(0)
+  const currentScrollTopRef = useRef(0)
 
   // Hook V2 - Architecture stable pour gérer les messages
   const {
@@ -68,12 +71,9 @@ export default function DashboardPage() {
     },
   })
 
-  // Hook pour garder l'état de chaque conversation (cache)
-  const {
-    saveConversation,
-    loadConversation,
-    hasConversation,
-  } = useConversationCache()
+  // Store Zustand pour garder l'état de chaque conversation
+  const saveConversation = useConversationStore(state => state.saveConversation)
+  const loadConversation = useConversationStore(state => state.loadConversation)
 
   // Récupérer les expéditeurs uniques
   const {
@@ -156,9 +156,12 @@ export default function DashboardPage() {
       }
     },
     {
-      // CLÉS PRO : Désactiver refresh si on a paginé (évite conflits)
-      refreshInterval: currentPage === 1 ? 60000 : 0,
+      // CLÉS PRO : Désactiver refresh si on a paginé ou si on restaure depuis cache
+      refreshInterval: currentPage === 1 && !useCacheOnly ? 60000 : 0,
       revalidateOnFocus: false,
+      revalidateOnReconnect: !useCacheOnly,
+      revalidateOnMount: !useCacheOnly,
+      revalidateIfStale: !useCacheOnly,
       dedupingInterval: 30000,
       onSuccess: (data: SmsLogsResponse | FcmLogsResponse | null) => {
         if (data) {
@@ -392,18 +395,16 @@ export default function DashboardPage() {
       // 1. SAUVEGARDER l'état de la conversation actuelle
       if (selectedSender) {
         const currentKey = `${isWaveMode ? 'wave' : 'sms'}-${selectedSender}`
-        const scrollElement = document.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement
-        const scrollPosition = scrollElement?.scrollTop || 0
+        const scrollPosition = currentScrollTopRef.current
         
-        saveConversation(
-          currentKey,
-          allMessages,
+        saveConversation(currentKey, {
+          messages: allMessages,
           currentPage,
           hasNextPage,
           scrollPosition,
-          getMessagesMap(),
-          getOrderArray()
-        )
+          messageMap: getMessagesMap(),
+          orderArray: getOrderArray(),
+        })
       }
       
       // 2. CHARGER l'état de la nouvelle conversation (si existe)
@@ -413,28 +414,30 @@ export default function DashboardPage() {
         
         if (cached) {
           console.log("✅ Conversation trouvée en cache, restauration...")
+          setUseCacheOnly(true)
           restoreState(cached.messageMap, cached.orderArray)
           setCurrentPage(cached.currentPage)
           setHasNextPage(cached.hasNextPage)
+          setRestoreScrollTop(cached.scrollPosition)
+          currentScrollTopRef.current = cached.scrollPosition
           
-          // Restaurer la position du scroll après un court délai
-          setTimeout(() => {
-            const scrollElement = document.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement
-            if (scrollElement) {
-              scrollElement.scrollTop = cached.scrollPosition
-              console.log(`📜 Scroll restauré à ${cached.scrollPosition}px`)
-            }
-          }, 100)
+          console.log(`📜 Scroll à restaurer: ${cached.scrollPosition}px`)
         } else {
           console.log("❌ Pas de cache, nouvelle conversation")
+          setUseCacheOnly(false)
           clearMessages()
           setCurrentPage(1)
           setHasNextPage(false)
+          setRestoreScrollTop(0)
+          currentScrollTopRef.current = 0
         }
       } else {
+        setUseCacheOnly(false)
         clearMessages()
         setCurrentPage(1)
         setHasNextPage(false)
+        setRestoreScrollTop(0)
+        currentScrollTopRef.current = 0
       }
       
       setIsLoadingMore(false)
@@ -520,7 +523,8 @@ export default function DashboardPage() {
 
             {/* Messages Section */}
             <div className="flex-1 min-h-0">
-              <MessageThread
+                <MessageThread
+                key={selectedSender ? `${isWaveMode ? 'wave' : 'sms'}-${selectedSender}` : 'empty'}
                 messages={allMessages}
                 sender={selectedSender}
                 onUpdateStatus={handleUpdateStatus}
@@ -533,6 +537,10 @@ export default function DashboardPage() {
                 isWaveMode={isWaveMode}
                 newMessageIds={newMessageIds}
                 onMarkAsRead={markMessagesAsRead}
+                restoreScrollTop={restoreScrollTop}
+                onScrollPositionChange={(pos) => {
+                  currentScrollTopRef.current = pos
+                }}
               />
             </div>
           </div>
