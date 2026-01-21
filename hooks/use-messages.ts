@@ -122,7 +122,7 @@ export function useMessages(options: UseMessagesOptions = {}): UseMessagesReturn
   /**
    * Ajoute des messages à la liste existante
    * @param newMessages - Nouveaux messages à ajouter
-   * @param replace - Si true, remplace tous les messages. Si false, fusionne avec les existants
+   * @param replace - Si true, remplace uniquement les messages qui existent déjà (mise à jour), sinon fusionne intelligemment
    */
   const addMessages = useCallback((newMessages: Message[], replace: boolean = false) => {
     if (isUpdatingRef.current) {
@@ -135,29 +135,62 @@ export function useMessages(options: UseMessagesOptions = {}): UseMessagesReturn
 
     try {
       setMessages(prev => {
+        if (prev.length === 0) {
+          // Si pas de messages, juste ajouter et trier
+          const processed = deduplicateAndSort(newMessages)
+          isUpdatingRef.current = false
+          return processed
+        }
+
         // Détecter les nouveaux messages AVANT la fusion
         const prevUids = new Set(prev.map(m => m.uid))
+        const newUids = new Set(newMessages.map(m => m.uid))
         const actuallyNew = newMessages.filter(m => !prevUids.has(m.uid))
+        const toUpdate = newMessages.filter(m => prevUids.has(m.uid))
         
-        const messagesToProcess = replace ? newMessages : [...prev, ...newMessages]
-        const processed = deduplicateAndSort(messagesToProcess)
-        
-        // Notifier les nouveaux messages uniquement s'il y en a vraiment de nouveaux
-        if (actuallyNew.length > 0) {
-          // Marquer les nouveaux messages pour les notifications
-          setNewMessageIds(prev => {
-            const newSet = new Set(prev)
-            actuallyNew.forEach(msg => newSet.add(msg.uid))
-            return newSet
-          })
+        if (replace) {
+          // Mode replace : mettre à jour les messages existants et ajouter les nouveaux
+          // On garde tous les messages existants qui ne sont pas dans newMessages
+          // On met à jour ceux qui sont dans newMessages
+          // On ajoute les nouveaux
+          const existingNotInNew = prev.filter(m => !newUids.has(m.uid))
+          const messagesToProcess = [...existingNotInNew, ...newMessages]
+          const processed = deduplicateAndSort(messagesToProcess)
           
-          if (onNewMessages) {
-            // Appeler le callback de manière asynchrone pour ne pas bloquer
-            setTimeout(() => onNewMessages(actuallyNew), 0)
+          // Notifier les nouveaux messages
+          if (actuallyNew.length > 0) {
+            setNewMessageIds(prev => {
+              const newSet = new Set(prev)
+              actuallyNew.forEach(msg => newSet.add(msg.uid))
+              return newSet
+            })
+            
+            if (onNewMessages) {
+              setTimeout(() => onNewMessages(actuallyNew), 0)
+            }
           }
+          
+          return processed
+        } else {
+          // Mode fusion : ajouter les nouveaux messages à la liste existante
+          const messagesToProcess = [...prev, ...newMessages]
+          const processed = deduplicateAndSort(messagesToProcess)
+          
+          // Notifier les nouveaux messages uniquement s'il y en a vraiment de nouveaux
+          if (actuallyNew.length > 0) {
+            setNewMessageIds(prev => {
+              const newSet = new Set(prev)
+              actuallyNew.forEach(msg => newSet.add(msg.uid))
+              return newSet
+            })
+            
+            if (onNewMessages) {
+              setTimeout(() => onNewMessages(actuallyNew), 0)
+            }
+          }
+          
+          return processed
         }
-        
-        return processed
       })
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Erreur lors de l'ajout des messages"

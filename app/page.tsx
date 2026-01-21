@@ -1,7 +1,7 @@
 "use client"
 
 import { SenderSidebar } from "@/components/sender-sidebar"
-import { MessageThread } from "@/components/message-thread"
+import { MessageThread } from "@/components/message-thread-v2"
 import { TopBar } from "@/components/top-bar"
 import { StatsCards } from "@/components/stats-cards"
 import { ProtectedRoute } from "@/components/protected-route"
@@ -33,7 +33,8 @@ import {
 } from "@/lib/pin-api"
 import { useState, useCallback, useEffect } from "react"
 import useSWR from "swr"
-import { useMessages } from "@/hooks/use-messages"
+import { useMessagesV2 } from "@/hooks/use-messages-v2"
+import { useConversationCache } from "@/hooks/use-conversation-cache"
 
 export default function DashboardPage() {
   const { logout } = useAuth()
@@ -50,7 +51,7 @@ export default function DashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
-  // Hook professionnel pour gérer les messages
+  // Hook V2 - Architecture stable pour gérer les messages
   const {
     messages: allMessages,
     addMessages,
@@ -58,12 +59,21 @@ export default function DashboardPage() {
     clearMessages,
     newMessageIds,
     markMessagesAsRead,
-  } = useMessages({
+    getMessagesMap,
+    getOrderArray,
+    restoreState,
+  } = useMessagesV2({
     onNewMessages: (newMessages) => {
       console.log(`✨ ${newMessages.length} nouveau(x) message(s) détecté(s)`)
-      // Optionnel: notification toast ou son pour nouveaux messages
     },
   })
+
+  // Hook pour garder l'état de chaque conversation (cache)
+  const {
+    saveConversation,
+    loadConversation,
+    hasConversation,
+  } = useConversationCache()
 
   // Récupérer les expéditeurs uniques
   const {
@@ -113,18 +123,21 @@ export default function DashboardPage() {
   } = useSWR<SmsStats>("stats", fetchSmsStats, {
     refreshInterval: 60000,
   })
+  // Architecture Google Messages : Cache intelligent par conversation
   const {
     data: messagesData,
     isLoading: messagesLoading,
     mutate: mutateMessages,
   } = useSWR(
-    selectedSender ? ["messages", selectedSender, searchQuery, statusFilter, isWaveMode] : null,
+    // Clé unique par conversation (pas par page)
+    selectedSender ? `messages-${isWaveMode ? 'wave' : 'sms'}-${selectedSender}-${searchQuery}-${statusFilter}` : null,
     async () => {
-      console.log("🔄 SWR messages fetcher called with:", { selectedSender, isWaveMode, searchQuery, statusFilter })
+      if (!selectedSender) return null
+      console.log("🔄 SWR fetching page 1 for:", selectedSender)
+      
       if (isWaveMode) {
-        console.log("🌊 Wave mode detected - calling fetchFcmLogs")
         return await fetchFcmLogs({
-          package_name: selectedSender || undefined,
+          package_name: selectedSender,
           search: searchQuery || undefined,
           status: statusFilter !== "all" ? statusFilter : undefined,
           ordering: "-created_at",
@@ -132,9 +145,8 @@ export default function DashboardPage() {
           page_size: 20,
         })
       } else {
-        console.log("📱 SMS mode detected - calling fetchSmsLogs")
         return await fetchSmsLogs({
-          sender: selectedSender || undefined,
+          sender: selectedSender,
           search: searchQuery || undefined,
           status: statusFilter !== "all" ? statusFilter : undefined,
           ordering: "-created_at",
@@ -144,13 +156,20 @@ export default function DashboardPage() {
       }
     },
     {
-      refreshInterval: 60000,
-      onSuccess: (data: SmsLogsResponse | FcmLogsResponse) => {
-        // Remplacer les messages de la première page (pour éviter les doublons lors du refresh)
-        // La déduplication dans useMessages s'occupera des cas où des messages existent déjà
-        addMessages(data.results, true)
-        setCurrentPage(1)
-        setHasNextPage(!!data.next)
+      // CLÉS PRO : Désactiver refresh si on a paginé (évite conflits)
+      refreshInterval: currentPage === 1 ? 60000 : 0,
+      revalidateOnFocus: false,
+      dedupingInterval: 30000,
+      onSuccess: (data: SmsLogsResponse | FcmLogsResponse | null) => {
+        if (data) {
+          // Remplacer UNIQUEMENT si on est sur la page 1
+          if (currentPage === 1) {
+            console.log("📥 Loading page 1:", data.results.length, "messages")
+            clearMessages()
+            addMessages(data.results, 'top') // Nouveaux messages en haut
+          }
+          setHasNextPage(!!data.next)
+        }
       },
     },
   )
@@ -292,17 +311,23 @@ export default function DashboardPage() {
   }
 
   const handleLoadMore = useCallback(async () => {
-    if (!hasNextPage || isLoadingMore || !selectedSender) return
+    // Protection stricte contre les appels multiples
+    if (!hasNextPage || isLoadingMore || !selectedSender) {
+      console.log("⛔ LoadMore bloqué:", { hasNextPage, isLoadingMore, selectedSender })
+      return
+    }
 
+    console.log(`📥 Chargement page ${currentPage + 1}...`)
     setIsLoadingMore(true)
     setError(null)
+    
     try {
       const nextPage = currentPage + 1
       let data: SmsLogsResponse | FcmLogsResponse
       
       if (isWaveMode) {
         data = await fetchFcmLogs({
-          package_name: selectedSender || undefined,
+          package_name: selectedSender,
           search: searchQuery || undefined,
           status: statusFilter !== "all" ? statusFilter : undefined,
           ordering: "-created_at",
@@ -320,16 +345,19 @@ export default function DashboardPage() {
         })
       }
 
-      // Ajouter les nouveaux messages (la déduplication est gérée automatiquement par useMessages)
-      addMessages(data.results, false)
+      console.log(`✅ Page ${nextPage} chargée:`, data.results.length, "messages")
       
+      // Ajouter les messages de la pagination EN BAS (scroll infini)
+      addMessages(data.results, 'bottom')
+      
+      // Mettre à jour l'état de pagination
       setCurrentPage(nextPage)
       setHasNextPage(!!data.next)
-    } catch (error) {
-      console.error("Erreur lors du chargement de plus de messages:", error)
       
-      // Extract error message from backend response
-      let errorMessage = "Erreur lors du chargement des messages. Veuillez réessayer."
+    } catch (error) {
+      console.error("❌ Erreur chargement page:", error)
+      
+      let errorMessage = "Erreur lors du chargement des messages."
       
       if (error instanceof Error) {
         errorMessage = error.message
@@ -341,35 +369,94 @@ export default function DashboardPage() {
           errorMessage = errorObj.response.data.message
         } else if (errorObj.response?.data?.error) {
           errorMessage = errorObj.response.data.error
-        } else if (errorObj.message) {
-          errorMessage = errorObj.message
         }
       }
       
       setError(errorMessage)
     } finally {
-      setIsLoadingMore(false)
+      // Délai de sécurité avant de permettre un nouveau chargement
+      setTimeout(() => {
+        setIsLoadingMore(false)
+      }, 800)
     }
   }, [hasNextPage, isLoadingMore, selectedSender, currentPage, searchQuery, statusFilter, isWaveMode, addMessages])
 
-  // Reset messages when sender changes
+  // Changement de conversation avec cache
   const handleSelectSender = useCallback((sender: string | null, waveMode: boolean = false) => {
-    console.log("🎯 handleSelectSender called with:", { sender, waveMode })
+    console.log("🎯 Changement de conversation:", { sender, waveMode })
     
-    // Only reset messages if the sender or wave mode actually changed
     const senderChanged = selectedSender !== sender
     const waveModeChanged = isWaveMode !== waveMode
     
     if (senderChanged || waveModeChanged) {
-      clearMessages()
-      setCurrentPage(1)
-      setHasNextPage(false)
+      // 1. SAUVEGARDER l'état de la conversation actuelle
+      if (selectedSender) {
+        const currentKey = `${isWaveMode ? 'wave' : 'sms'}-${selectedSender}`
+        const scrollElement = document.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement
+        const scrollPosition = scrollElement?.scrollTop || 0
+        
+        saveConversation(
+          currentKey,
+          allMessages,
+          currentPage,
+          hasNextPage,
+          scrollPosition,
+          getMessagesMap(),
+          getOrderArray()
+        )
+      }
+      
+      // 2. CHARGER l'état de la nouvelle conversation (si existe)
+      if (sender) {
+        const newKey = `${waveMode ? 'wave' : 'sms'}-${sender}`
+        const cached = loadConversation(newKey)
+        
+        if (cached) {
+          console.log("✅ Conversation trouvée en cache, restauration...")
+          restoreState(cached.messageMap, cached.orderArray)
+          setCurrentPage(cached.currentPage)
+          setHasNextPage(cached.hasNextPage)
+          
+          // Restaurer la position du scroll après un court délai
+          setTimeout(() => {
+            const scrollElement = document.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement
+            if (scrollElement) {
+              scrollElement.scrollTop = cached.scrollPosition
+              console.log(`📜 Scroll restauré à ${cached.scrollPosition}px`)
+            }
+          }, 100)
+        } else {
+          console.log("❌ Pas de cache, nouvelle conversation")
+          clearMessages()
+          setCurrentPage(1)
+          setHasNextPage(false)
+        }
+      } else {
+        clearMessages()
+        setCurrentPage(1)
+        setHasNextPage(false)
+      }
+      
       setIsLoadingMore(false)
+      setError(null)
     }
     
     setSelectedSender(sender)
     setIsWaveMode(waveMode)
-  }, [selectedSender, isWaveMode, clearMessages])
+    setIsMobileMenuOpen(false)
+  }, [
+    selectedSender,
+    isWaveMode,
+    allMessages,
+    currentPage,
+    hasNextPage,
+    clearMessages,
+    saveConversation,
+    loadConversation,
+    getMessagesMap,
+    getOrderArray,
+    restoreState,
+  ])
 
   return (
     <ProtectedRoute>

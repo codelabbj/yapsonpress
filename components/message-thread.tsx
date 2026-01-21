@@ -160,35 +160,73 @@ export function MessageThread({ messages, sender, onUpdateStatus, isLoading, isU
     return content && content.length > 300
   }
 
+  // Référence pour préserver la position du scroll
+  const scrollPositionRef = useRef<number>(0)
+  const isAtBottomRef = useRef<boolean>(false)
+  const scrollContainerRef = useRef<HTMLElement | null>(null)
+
   // Gestion intelligente du scroll
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget
+    const scrollElement = event.currentTarget
+    
+    // Sauvegarder la position actuelle
+    scrollPositionRef.current = scrollTop
+    scrollContainerRef.current = scrollElement
+    
+    // Détecter si on est en bas (à 50px près)
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50
+    isAtBottomRef.current = isAtBottom
     
     // Détecter si l'utilisateur scroll (vs auto-scroll)
     const scrollDelta = Math.abs(scrollTop - previousScrollTopRef.current)
     if (scrollDelta > 10) {
       isUserScrollingRef.current = true
+      // Reset après 1 seconde d'inactivité
+      setTimeout(() => {
+        isUserScrollingRef.current = false
+      }, 1000)
     }
     previousScrollTopRef.current = scrollTop
     
     // Check if user has scrolled to within 200px of the bottom
+    // Seulement si on charge vraiment plus (pas lors d'un refresh)
     if (scrollHeight - scrollTop - clientHeight < 200) {
-      if (hasNextPage && !isLoadingMore && onLoadMore) {
+      if (hasNextPage && !isLoadingMore && !isLoading && onLoadMore) {
         onLoadMore()
       }
     }
-  }, [hasNextPage, isLoadingMore, onLoadMore])
+  }, [hasNextPage, isLoadingMore, isLoading, onLoadMore])
 
-  // Auto-scroll vers le haut si de nouveaux messages arrivent et que l'utilisateur est en haut
+  // Préserver la position du scroll lors des mises à jour de messages
   useEffect(() => {
-    if (newMessageIds.size > 0 && scrollAreaRef.current && !isUserScrollingRef.current) {
+    if (scrollAreaRef.current && !isUserScrollingRef.current && !isLoading) {
       const scrollElement = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement
-      if (scrollElement && scrollElement.scrollTop < 100) {
-        // L'utilisateur est en haut, on peut auto-scroller légèrement pour montrer les nouveaux messages
-        scrollElement.scrollTo({ top: 0, behavior: 'smooth' })
+      if (scrollElement) {
+        const savedPosition = scrollPositionRef.current
+        const wasAtBottom = isAtBottomRef.current
+        const currentScrollTop = scrollElement.scrollTop
+        
+        // Si on était en bas, rester en bas après mise à jour
+        if (wasAtBottom) {
+          requestAnimationFrame(() => {
+            if (scrollElement) {
+              scrollElement.scrollTop = scrollElement.scrollHeight
+              previousScrollTopRef.current = scrollElement.scrollTop
+            }
+          })
+        } else if (savedPosition > 0 && Math.abs(currentScrollTop - savedPosition) > 50) {
+          // Sinon, restaurer la position exacte seulement si elle a changé significativement
+          requestAnimationFrame(() => {
+            if (scrollElement) {
+              scrollElement.scrollTop = savedPosition
+              previousScrollTopRef.current = savedPosition
+            }
+          })
+        }
       }
     }
-  }, [newMessageIds.size])
+  }, [messages.length, isLoading]) // Se déclenche quand le nombre de messages change
 
   if (!sender) {
     return (
