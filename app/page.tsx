@@ -31,8 +31,9 @@ import {
   type PinnedSendersResponse,
   type PinnedSender,
 } from "@/lib/pin-api"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import useSWR from "swr"
+import { useMessages } from "@/hooks/use-messages"
 
 export default function DashboardPage() {
   const { logout } = useAuth()
@@ -40,7 +41,6 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [isUpdating, setIsUpdating] = useState(false)
-  const [allMessages, setAllMessages] = useState<any[]>([])
   const [currentPage, setCurrentPage] = useState(1)
   const [hasNextPage, setHasNextPage] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
@@ -48,6 +48,22 @@ export default function DashboardPage() {
   const [isWaveMode, setIsWaveMode] = useState(false)
   const [isPinning, setIsPinning] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+
+  // Hook professionnel pour gérer les messages
+  const {
+    messages: allMessages,
+    addMessages,
+    updateMessage,
+    clearMessages,
+    newMessageIds,
+    markMessagesAsRead,
+  } = useMessages({
+    onNewMessages: (newMessages) => {
+      console.log(`✨ ${newMessages.length} nouveau(x) message(s) détecté(s)`)
+      // Optionnel: notification toast ou son pour nouveaux messages
+    },
+  })
 
   // Récupérer les expéditeurs uniques
   const {
@@ -130,7 +146,9 @@ export default function DashboardPage() {
     {
       refreshInterval: 60000,
       onSuccess: (data: SmsLogsResponse | FcmLogsResponse) => {
-        setAllMessages(data.results)
+        // Remplacer les messages de la première page (pour éviter les doublons lors du refresh)
+        // La déduplication dans useMessages s'occupera des cas où des messages existent déjà
+        addMessages(data.results, true)
         setCurrentPage(1)
         setHasNextPage(!!data.next)
       },
@@ -148,7 +166,16 @@ export default function DashboardPage() {
         await updateSmsStatus(uid, status)
         mutateSenders()
       }
-      // Actualiser les données
+      // Mettre à jour le message localement immédiatement pour un feedback instantané
+      const message = allMessages.find(m => m.uid === uid)
+      if (message) {
+        updateMessage(uid, {
+          status: status,
+          status_display: status === "approved" ? "Approuvé" : "Pas de commande"
+        })
+      }
+      
+      // Actualiser les données depuis le serveur
       mutateMessages()
       mutateStats()
       
@@ -293,24 +320,11 @@ export default function DashboardPage() {
         })
       }
 
-      // Prevent duplicates by filtering out messages that already exist
-      setAllMessages(prev => {
-        const existingIds = new Set(prev.map(msg => msg.uid))
-        const newMessages = data.results.filter(msg => !existingIds.has(msg.uid))
-        return [...prev, ...newMessages]
-      })
+      // Ajouter les nouveaux messages (la déduplication est gérée automatiquement par useMessages)
+      addMessages(data.results, false)
       
       setCurrentPage(nextPage)
-      
-      // If no new messages were added or no next page, stop loading
-      const existingIds = new Set(allMessages.map(msg => msg.uid))
-      const newMessages = data.results.filter(msg => !existingIds.has(msg.uid))
-      
-      if (newMessages.length === 0 || !data.next) {
-        setHasNextPage(false)
-      } else {
-        setHasNextPage(!!data.next)
-      }
+      setHasNextPage(!!data.next)
     } catch (error) {
       console.error("Erreur lors du chargement de plus de messages:", error)
       
@@ -336,7 +350,7 @@ export default function DashboardPage() {
     } finally {
       setIsLoadingMore(false)
     }
-  }, [hasNextPage, isLoadingMore, selectedSender, currentPage, searchQuery, statusFilter, allMessages, isWaveMode])
+  }, [hasNextPage, isLoadingMore, selectedSender, currentPage, searchQuery, statusFilter, isWaveMode, addMessages])
 
   // Reset messages when sender changes
   const handleSelectSender = useCallback((sender: string | null, waveMode: boolean = false) => {
@@ -347,7 +361,7 @@ export default function DashboardPage() {
     const waveModeChanged = isWaveMode !== waveMode
     
     if (senderChanged || waveModeChanged) {
-      setAllMessages([])
+      clearMessages()
       setCurrentPage(1)
       setHasNextPage(false)
       setIsLoadingMore(false)
@@ -355,7 +369,7 @@ export default function DashboardPage() {
     
     setSelectedSender(sender)
     setIsWaveMode(waveMode)
-  }, [selectedSender, isWaveMode])
+  }, [selectedSender, isWaveMode, clearMessages])
 
   return (
     <ProtectedRoute>
@@ -368,6 +382,7 @@ export default function DashboardPage() {
           onRefresh={handleRefresh}
           isRefreshing={isRefreshing}
           onLogout={logout}
+          onMenuClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         />
 
         <div className="flex flex-1 overflow-hidden">
@@ -391,18 +406,18 @@ export default function DashboardPage() {
           <div className="flex flex-1 flex-col min-w-0">
             {/* Error Display */}
             {error && (
-              <div className="bg-red-50 border-l-4 border-red-400 p-4 m-4 rounded">
+              <div className="bg-red-50 border-l-4 border-red-400 p-3 sm:p-4 m-2 sm:m-4 rounded">
                 <div className="flex">
                   <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                    <svg className="h-4 w-4 sm:h-5 sm:w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
                   </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-red-700">{error}</p>
+                  <div className="ml-2 sm:ml-3 flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm text-red-700 break-words">{error}</p>
                     <button
                       onClick={() => setError(null)}
-                      className="mt-2 text-sm text-red-600 hover:text-red-500 underline"
+                      className="mt-1 sm:mt-2 text-xs sm:text-sm text-red-600 hover:text-red-500 underline"
                     >
                       Fermer
                     </button>
@@ -429,20 +444,37 @@ export default function DashboardPage() {
                 onLoadMore={handleLoadMore}
                 currentPage={currentPage}
                 isWaveMode={isWaveMode}
+                newMessageIds={newMessageIds}
+                onMarkAsRead={markMessagesAsRead}
               />
             </div>
           </div>
         </div>
 
         {/* Mobile Sidebar Overlay */}
-        {selectedSender && (
-          <div className="lg:hidden fixed inset-0 z-50 bg-black/50" onClick={() => handleSelectSender(null)}>
-            <div className="absolute right-0 top-0 h-full w-80 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        {isMobileMenuOpen && (
+          <div 
+            className="lg:hidden fixed inset-0 z-50 bg-black/50 transition-opacity" 
+            onClick={() => setIsMobileMenuOpen(false)}
+          >
+            <div 
+              className="absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-white shadow-xl transform transition-transform"
+              onClick={(e) => e.stopPropagation()}
+            >
               <SenderSidebar
                 senders={senders || []}
                 selectedSender={selectedSender}
-                onSelectSender={handleSelectSender}
+                onSelectSender={(sender, waveMode) => {
+                  handleSelectSender(sender, waveMode)
+                  setIsMobileMenuOpen(false)
+                }}
                 isLoading={sendersLoading}
+                wavePackages={wavePackages || []}
+                wavePackagesLoading={wavePackagesLoading}
+                pinnedSenders={pinnedSenders}
+                onPinSender={handlePinSender}
+                onUnpinSender={handleUnpinSender}
+                isPinning={isPinning}
               />
             </div>
           </div>
